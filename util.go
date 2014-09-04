@@ -64,8 +64,14 @@ func (s stream) Close() {
 	s.r.Close()
 }
 
+func ReadBuf(r io.Reader, n int) (b []byte, err error) {
+	b = make([]byte, n)
+	_, err = r.Read(b)
+	return
+}
+
 func ReadInt(r io.Reader, n int) (ret int) {
-	b := ReadBuf(r, n)
+	b, _ := ReadBuf(r, n)
 	for i := 0; i < n; i++ {
 		ret <<= 8
 		ret += int(b[i])
@@ -74,7 +80,7 @@ func ReadInt(r io.Reader, n int) (ret int) {
 }
 
 func ReadIntLE(r io.Reader, n int) (ret int) {
-	b := ReadBuf(r, n)
+	b, _ := ReadBuf(r, n)
 	for i := 0; i < n; i++ {
 		ret <<= 8
 		ret += int(b[n-i-1])

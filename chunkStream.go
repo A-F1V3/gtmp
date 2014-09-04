@@ -10,7 +10,7 @@ type ChunkStream struct {
 	chunkSize int
 }
 
-func (c *ChunkStream) readChunks(input io.Reader, messages chan *Message) {
+func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 	chunkMap := make(map[int]*Message)
 
 	for {
@@ -36,7 +36,7 @@ func (c *ChunkStream) readChunks(input io.Reader, messages chan *Message) {
 
 }
 
-func (c *ChunkStream) writeChunks(messages chan *Message, output io.Writer) {
+func (c *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) {
 
 }
 

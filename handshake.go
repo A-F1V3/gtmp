@@ -122,14 +122,8 @@ func parseChal(b []byte, peerKey []byte, key []byte) (dig []byte, err int) {
 	return
 }
 
-func ReadBuf(r io.Reader, n int) (b []byte) {
-	b = make([]byte, n)
-	r.Read(b)
-	return
-}
-
 func handShake(rw io.ReadWriter) {
-	b := ReadBuf(rw, 1537)
+	b, _ := ReadBuf(rw, 1537)
 	log.Printf("handshake: got client chal")
 	dig, err := parseChal(b, clientKey2, serverKey)
 	if err != 0 {
@@ -145,6 +139,6 @@ func handShake(rw io.ReadWriter) {
 	log.Printf("handshake: send server resp")
 	rw.Write(b)
 
-	b = ReadBuf(rw, 1536)
+	b, _ = ReadBuf(rw, 1536)
 	log.Printf("handshake: got client resp")
 }

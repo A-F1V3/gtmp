@@ -7,7 +7,10 @@ import (
 )
 
 func handleConnection(conn io.ReadWriteCloser) {
-	defer conn.Close()
+	defer {
+		log.Println("Closing Connection")
+		conn.Close()
+	}
 
 	done := make(chan int)
 	handShake(conn)

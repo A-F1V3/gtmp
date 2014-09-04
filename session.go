@@ -2,7 +2,6 @@ package main
 
 import (
 	"io"
-	"log"
 )
 
 type Session struct {
@@ -12,14 +11,10 @@ type Session struct {
 func startNewSession(rw io.ReadWriter, c chan int) (session *Session) {
 	inMessageChannel := make(chan *Message, 50)
 	inChunkStream := ChunkStream{chunkSize: 128}
-	go inChunkStream.readChunks(rw, inMessageChannel)
-	go messageReader(inMessageChannel)
+	messageStream := MessageStream{inChan: inMessageChannel}
+	go inChunkStream.ReadChunks(rw, inMessageChannel)
+
+	go messageStream.ReadMessages()
 
 	return
-}
-
-func messageReader(messages chan *Message) {
-	for message := range messages {
-		log.Println("I got a message!: ", message)
-	}
 }
