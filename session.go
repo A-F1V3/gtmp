@@ -8,13 +8,17 @@ type Session struct {
 	sessionType string
 }
 
-func startNewSession(rw io.ReadWriter, c chan int) (session *Session) {
+func NewSession(rw io.ReadWriteCloser, server Server, c chan int) (session *Session) {
+  defer rw.Close()
+
+  handShake(rw)
+
 	inMessageChannel := make(chan *Message, 50)
 	inChunkStream := ChunkStream{chunkSize: 128}
 	messageStream := MessageStream{inChan: inMessageChannel}
-	go inChunkStream.ReadChunks(rw, inMessageChannel)
 
-	go messageStream.ReadMessages()
+	go inChunkStream.ReadChunks(rw, inMessageChannel)
+	messageStream.ReadMessages()
 
 	return
 }

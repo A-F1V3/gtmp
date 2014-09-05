@@ -71,3 +71,5 @@ func (msg *Message) addChunk(chunk *Chunk) (*Message, bool) {
 
 	return msg, true
 }
+
+
