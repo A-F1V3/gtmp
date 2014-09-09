@@ -4,28 +4,44 @@ import (
 	"bytes"
 	"io"
 	"log"
+	"sync"
 )
 
 type ChunkStream struct {
+	sync.Mutex
 	chunkSize int
 }
 
+const (
+  DEFAULT_CHUNK_SIZE = 128
+)
+
 func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
-	chunkMap := make(map[int]*Message)
+	defer close(messages)
+
+  chunkMap := make(map[int]*Message)
+  chunkSize := DEFAULT_CHUNK_SIZE
 
 	for {
-		chunk := readChunk(input, 128)
-		log.Println("Chunk: ", chunk)
+		chunk, err := ReadChunk(input, chunkSize)
+    if err != nil {
+      return
+    }
 		message, ok := chunkMap[chunk.csid]
 		if !ok {
-			message = &Message{payload: &bytes.Buffer{}}
+			message  = &Message{payload: &bytes.Buffer{}}
 		}
 
-		message, more := message.addChunk(chunk)
+		message, more, err := message.addChunk(chunk)
+		if err != nil {
+			return
+		}
 
 		if !more {
-			log.Println("thats a message: ", message)
+			log.Println("Full Message Parsed: ", message)
 			messages <- message
+
+			//copy message with with new payload buffer
 			new_message := *message
 			new_message.payload = &bytes.Buffer{}
 			chunkMap[chunk.csid] = &new_message
@@ -36,48 +52,40 @@ func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 
 }
 
-func (c *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) {
+func (cs *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) {
+	for message := range messages {
+		log.Println("CHUNK IT:", message)
+		c := &Chunk{size: cs.chunkSize}
+		c.fmt = 0
+		c.csid = 2
+		c.ts = message.timestamp
+		c.msid = message.streamid
+		c.mlen = message.length
+		c.mtypeid = message.typeid
+		c.reader = message.payload
 
+		for n := c.mlen; n > 0; {
+			c.WriteChunkHeader(output)
+
+			written, _ :=	io.CopyN(output, c.reader, int64(c.size))
+			n -= int(written)
+
+			if n > 0 && n < c.size {
+				log.Println("Writing moar")
+				tt, _ :=output.Write(make([]byte,n))
+				n -= int(tt)
+			}
+		}
+		log.Println("done with:", message)
+
+	}
 }
 
-func readChunk(r io.Reader, chunkSize int) (c *Chunk) {
+func ReadChunk(r io.Reader, chunkSize int) (c *Chunk, err error) {
 	c = &Chunk{size: chunkSize, reader: r}
-
-	i := ReadInt(r, 1)
-	c.fmt = (i >> 6) & 3
-	c.csid = i & 0x3f
-
-	if c.csid == 0 {
-		j := ReadInt(r, 1)
-		c.csid = j + 64
-	} else if c.csid == 0x01 {
-		j := ReadInt(r, 2)
-		c.csid = j + 64
-	}
-
-	if c.fmt == 0 {
-		c.ts = ReadInt(r, 3)
-		c.mlen = ReadInt(r, 3)
-		c.mtypeid = ReadInt(r, 1)
-		c.msid = ReadIntLE(r, 4)
-	}
-
-	if c.fmt == 1 {
-		c.tsdelta = ReadInt(r, 3)
-		c.mlen = ReadInt(r, 3)
-		c.mtypeid = ReadInt(r, 1)
-	}
-
-	if c.fmt == 2 {
-		c.tsdelta = ReadInt(r, 3)
-	}
-
-	if c.ts == 0xffffff {
-		c.ts = ReadInt(r, 4)
-	}
-	if c.tsdelta == 0xffffff {
-		c.tsdelta = ReadInt(r, 4)
-	}
+	err = c.ReadChunkHeader(r)
 
 	return
 }
+
+

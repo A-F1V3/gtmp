@@ -5,6 +5,10 @@ import (
   "net"
 )
 
+var (
+  MAX_CONNECITONS = 2
+)
+
 type Server struct {
   apps map[string]*Application
   address string
@@ -17,32 +21,22 @@ func NewServer(address string, done chan int) *Server{
     lstnr, err := net.Listen("tcp", server.address)
     if err != nil {
       log.Println("Socket listen err: ", err)
+      return
     }
 
+    sessionLimit := make(chan int, MAX_CONNECITONS)
     for {
+      sessionLimit <- 1
       connection, err := lstnr.Accept()
       log.Println("New Connection from: ", connection.RemoteAddr().String())
       if err != nil {
         log.Println("New connection err: ", err)
         continue
       }
-      fin := make(chan int)
-      go NewSession(connection, server, fin)  //handleConnection(connection)
+      go NewSession(connection, server, sessionLimit)
     }
     done <- 1
   }()
 
   return &server
 }
-
-// func handleConnection(conn io.ReadWriteCloser) {
-//   defer func() {
-//     log.Println("Closing Connections")
-//     conn.Close()
-//   }()
-
-//   done := make(chan int)
-//   handShake(conn)
-//   NewSession(conn, done)
-//   <-done
-// }

@@ -2,12 +2,17 @@ package main
 
 import (
 	"log"
+  "bytes"
 )
 
 const (
 	UNDEF = 0
 	PUB
 	PLAY
+)
+
+const (
+  DEFAULT_ACK_SIZE = 5000000
 )
 
 type MessageStream struct {
@@ -44,6 +49,8 @@ func (m *MessageStream) handleMessage(message *Message) {
 	case MSG_AMF_CMD:
 		log.Println("Got Command Message")
 		m.handleAmfCommand(message)
+  default:
+    log.Println("unhandled msg type:",message)
 	}
 
 	m.lastMessage = message
@@ -79,7 +86,49 @@ func (m MessageStream) handleConnect(message *Message) {
   appName := commandObject.obj["app"].str
   log.Println("Connect message for app:", appName)
 
+  log.Println("Command Object: ", commandObject)
 
+  var msg *Message
+  var err error
+
+  msg, err = NewSetWindowSizeMessage(DEFAULT_ACK_SIZE)
+  m.outChan <- msg
+
+  msg, err = NewSetPeerBWMessage(DEFAULT_ACK_SIZE, 0)
+  m.outChan <- msg
+
+  msg, err = NewStreamBeginMessage(message.streamid)
+  if err != nil {
+    log.Println("msg create error:", err)
+  }
+  m.outChan <- msg
+
+  result := []AMFObj {
+    AMFObj { atype : AMF_STRING, str : "_result", },
+    AMFObj { atype : AMF_NUMBER, f64 : txnId.f64, },
+    AMFObj { atype : AMF_OBJECT,
+      obj : map[string] AMFObj {
+        "flashVer" : AMFObj { atype : AMF_STRING, str : "FMS/3,0,1,123", },
+        "capabilities" : AMFObj { atype : AMF_NUMBER, f64 : 31, },
+      },
+    },
+    AMFObj { atype : AMF_OBJECT,
+      obj : map[string] AMFObj {
+        "level" : AMFObj { atype : AMF_STRING, str : "status", },
+        "code" : AMFObj { atype : AMF_STRING, str : "NetConnection.Connect.Success", },
+        "description" : AMFObj { atype : AMF_STRING, str : "Connection Success.", },
+        "objectEncoding" : AMFObj { atype : AMF_NUMBER, f64 : 0, },
+      },
+    },
+  }
+
+  var b bytes.Buffer
+  for _, v := range result {
+    WriteAMF(&b, v)
+  }
+  msg = NewControlMessage(MSG_AMF_CMD, b.Bytes())
+
+  m.outChan <- msg
 
 }
 

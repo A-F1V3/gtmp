@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"bytes"
 )
 
 type Chunk struct {
@@ -14,4 +15,93 @@ type Chunk struct {
 	mtypeid int
 	size    int
 	reader  io.Reader
+}
+
+func (c *Chunk) ReadChunkHeader(r io.Reader) (err error) {
+	err = c.readFmtId(r)
+	if err != nil { return }
+
+	c.readMsgHeader(r)
+	return
+}
+
+func (c *Chunk) readFmtId(r io.Reader) (err error) {
+	i, err := ReadInt(r,1)
+	if err != nil { return }
+
+	c.fmt = (i >> 6) & 3
+	c.csid = i & 0x3f
+
+	var j int
+	if c.csid == 0 {
+		j, err = ReadInt(r, 1)
+		c.csid = j + 64
+	} else if c.csid == 0x01 {
+		j, err = ReadInt(r, 2)
+		c.csid = j + 64
+	}
+
+	return
+}
+
+func (c *Chunk) readMsgHeader(r io.Reader) (err error) {
+
+	if c.fmt == 0 {
+		c.ts, err = ReadInt(r, 3)
+		if err != nil {return}
+		c.mlen, err = ReadInt(r, 3)
+		if err != nil {return}
+		c.mtypeid, err = ReadInt(r, 1)
+		if err != nil {return}
+		c.msid, err = ReadIntLE(r, 4)
+		if err != nil {return}
+	}
+
+	if c.fmt == 1 {
+		c.tsdelta, err = ReadInt(r, 3)
+		if err != nil {return}
+		c.mlen, err = ReadInt(r, 3)
+		if err != nil {return}
+		c.mtypeid, err = ReadInt(r, 1)
+		if err != nil {return}
+	}
+
+	if c.fmt == 2 {
+		c.tsdelta, err = ReadInt(r, 3)
+		if err != nil {return}
+	}
+
+	if c.ts == 0xffffff {
+		c.ts, err = ReadInt(r, 4)
+	}
+	if c.tsdelta == 0xffffff {
+		c.tsdelta, err = ReadInt(r, 4)
+	}
+
+	return
+}
+
+func (c *Chunk) WriteChunkHeader(w io.Writer) (err error) {
+	var b bytes.Buffer
+	if c.csid < 64 {
+		WriteInt(&b,c.csid,1)
+	}
+
+	switch c.fmt{
+	case 0:
+		WriteInt(&b,c.ts,3)
+		WriteInt(&b,c.mlen,3)
+		WriteInt(&b,c.mtypeid,1)
+		WriteInt(&b,c.msid,4)
+	case 1:
+
+	case 2:
+
+	case 3:
+
+	}
+
+	w.Write(b.Bytes())
+
+	return nil
 }

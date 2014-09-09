@@ -70,8 +70,8 @@ func ReadBuf(r io.Reader, n int) (b []byte, err error) {
 	return
 }
 
-func ReadInt(r io.Reader, n int) (ret int) {
-	b, _ := ReadBuf(r, n)
+func ReadInt(r io.Reader, n int) (ret int, err error) {
+	b, err := ReadBuf(r, n)
 	for i := 0; i < n; i++ {
 		ret <<= 8
 		ret += int(b[i])
@@ -79,8 +79,8 @@ func ReadInt(r io.Reader, n int) (ret int) {
 	return
 }
 
-func ReadIntLE(r io.Reader, n int) (ret int) {
-	b, _ := ReadBuf(r, n)
+func ReadIntLE(r io.Reader, n int) (ret int, err error) {
+	b, err := ReadBuf(r, n)
 	for i := 0; i < n; i++ {
 		ret <<= 8
 		ret += int(b[n-i-1])
@@ -88,24 +88,29 @@ func ReadIntLE(r io.Reader, n int) (ret int) {
 	return
 }
 
-func WriteBuf(w io.Writer, buf []byte) {
-	w.Write(buf)
+func WriteBuf(w io.Writer, buf []byte) (int, error){
+	return w.Write(buf)
 }
 
 func WriteInt(w io.Writer, v int, n int) {
-	b := make([]byte, n)
-	for i := 0; i < n; i++ {
-		b[n-i-1] = byte(v & 0xff)
-		v >>= 8
-	}
+	b := IntToBuf(v,n)
 	WriteBuf(w, b)
 }
 
-func WriteIntLE(w io.Writer, v int, n int) {
+func WriteIntLE(w io.Writer, v int, n int) (int, error) {
 	b := make([]byte, n)
 	for i := 0; i < n; i++ {
 		b[i] = byte(v & 0xff)
 		v >>= 8
 	}
-	WriteBuf(w, b)
+	return WriteBuf(w, b)
+}
+
+func IntToBuf(num int, size int) ([]byte){
+	b := make([]byte, size)
+	for i := 0; i < size; i++ {
+		b[size-i-1] = byte(num&0xff)
+		num >>= 8
+	}
+	return b
 }

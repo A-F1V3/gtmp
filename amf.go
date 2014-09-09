@@ -32,23 +32,23 @@ type AMFObj struct {
 }
 
 func ReadAMF(r io.Reader) (a AMFObj) {
-	a.atype = ReadInt(r, 1)
+	a.atype, _ = ReadInt(r, 1)
 	switch a.atype {
 	case AMF_STRING:
-		n := ReadInt(r, 2)
+		n, _ := ReadInt(r, 2)
 		b, _ := ReadBuf(r, n)
 		a.str = string(b)
 	case AMF_NUMBER:
 		binary.Read(r, binary.BigEndian, &a.f64)
 	case AMF_BOOLEAN:
-		a.i = ReadInt(r, 1)
+		a.i, _ = ReadInt(r, 1)
 	case AMF_MIXED_ARRAY:
 		ReadInt(r, 4)
 		fallthrough
 	case AMF_OBJECT:
 		a.obj = map[string]AMFObj{}
 		for {
-			n := ReadInt(r, 2)
+			n, _ := ReadInt(r, 2)
 			if n == 0 {
 				break
 			}
@@ -59,11 +59,11 @@ func ReadAMF(r io.Reader) (a AMFObj) {
 	case AMF_ARRAY, AMF_VARIANT_:
 		panic("amf: read: unsupported array or variant")
 	case AMF_INT8:
-		a.i = ReadInt(r, 1)
+		a.i, _ = ReadInt(r, 1)
 	case AMF_INT16:
-		a.i = ReadInt(r, 2)
+		a.i, _ = ReadInt(r, 2)
 	case AMF_INT32:
-		a.i = ReadInt(r, 4)
+		a.i, _ = ReadInt(r, 4)
 	}
 	return
 }

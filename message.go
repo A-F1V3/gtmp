@@ -2,9 +2,10 @@ package main
 
 import (
 	"io"
-	//"log"
+	"log"
 	"bytes"
 	"fmt"
+	"errors"
 )
 
 const (
@@ -27,6 +28,16 @@ const (
 	MSG_MAX         = 22
 )
 
+const (
+	USR_STREAM_BEGIN = 0
+	USR_STREAM_EOF   = 1
+	USR_STREAM_DRY   = 2
+	USR_SET_BUF_LEN  = 3
+	USR_STREAM_REC   = 4
+	USR_PING_REQ     = 6
+	USR_PING_RES     = 7
+)
+
 type Message struct {
 	typeid    int
 	length    int
@@ -36,10 +47,10 @@ type Message struct {
 }
 
 func (msg *Message) String() string {
-	return fmt.Sprintf("Message{ Type: %d, Timestamp: %d, Stream: %d }", msg.typeid, msg.timestamp, msg.streamid)
+	return fmt.Sprintf("Message{ Type: %d, Timestamp: %d, Stream: %d, Length: %d }", msg.typeid, msg.timestamp, msg.streamid, msg.lengths)
 }
 
-func (msg *Message) addChunk(chunk *Chunk) (*Message, bool) {
+func (msg *Message) addChunk(chunk *Chunk) (*Message, bool, error) {
 
 	switch chunk.fmt {
 	case 0:
@@ -62,14 +73,72 @@ func (msg *Message) addChunk(chunk *Chunk) (*Message, bool) {
 	}
 
 	if size > 0 {
-		io.CopyN(msg.payload, chunk.reader, int64(size))
+		n, err := io.CopyN(msg.payload, chunk.reader, int64(size))
+		if n != int64(size) {
+			e := errors.New("Chunk data copy error")
+			return msg, false ,e
+		}
+		if err != nil {
+			return msg, false, err
+		}
 	}
 
 	if size == left {
-		return msg, false
+		return msg, false, nil
 	}
 
-	return msg, true
+	return msg, true, nil
 }
 
+func NewControlMessage(typeid int, payload []byte) (*Message){
+	message := Message{typeid: typeid, timestamp: 0, streamid: 0, payload: &bytes.Buffer{}}
+	message.payload.Write(payload)
+	message.length = message.payload.Len()
+
+	return &message
+}
+
+func NewSetChunkSizeMessage(chunksize int) (*Message, error) {
+	if chunksize < 1 {
+		log.Println("Error chunksize is less that one")
+	} else if chunksize < 128 {
+		log.Println("Warn: chunksize should be at least 128:", chunksize)
+	}
+
+	buf := IntToBuf(chunksize, 4)
+	return NewControlMessage(MSG_CHUNK_SIZE, buf), nil
+}
+
+func NewAbortMessage(csid int) (*Message, error) {
+	buf := IntToBuf(csid, 4)
+	return NewControlMessage(MSG_ABORT, buf), nil
+}
+
+func NewAckMessage(byteCount int) (*Message, error) {
+	buf := IntToBuf(byteCount, 4)
+	return NewControlMessage(MSG_ACK, buf), nil
+}
+
+func NewSetWindowSizeMessage(byteCount int) (*Message, error) {
+	buf := IntToBuf(byteCount, 4)
+	return NewControlMessage(MSG_ACK_SIZE, buf), nil
+}
+
+func NewSetPeerBWMessage(byteCount int, limitType int) (*Message, error) {
+	buf := IntToBuf(byteCount, 4)
+	buf = append(buf, byte(limitType & 0xff))
+	return NewControlMessage(MSG_BANDWIDTH, buf), nil
+}
+
+func NewUserCtrlMessage(typeid int, value []byte) (*Message, error) {
+	var b bytes.Buffer
+	WriteInt(&b, typeid, 2)
+	b.Write(value)
+	return NewControlMessage(MSG_USER, b.Bytes()), nil
+}
+
+func NewStreamBeginMessage(streamid int) (*Message, error) {
+	buf := IntToBuf(streamid, 4)
+  return NewUserCtrlMessage(USR_STREAM_BEGIN, buf)
+}
 
