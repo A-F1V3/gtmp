@@ -1,14 +1,16 @@
-package gtmp
+package main
 
 import (
 	"encoding/json"
+	"flag"
 	"io/ioutil"
 	"log"
 )
 
 func main() {
 
-	conf, err := ioutil.ReadFile("config/config.json")
+	configFile := flag.String("config", "config/config.json", "JSON configuration file")
+	conf, err := ioutil.ReadFile(*configFile)
 	if err != nil {
 		panic(err)
 	}
@@ -21,7 +23,7 @@ func main() {
 
 	for _, server := range config.Servers {
 		log.Println("Starting RTMP Server on", server.Address)
-		NewServer(server.Address, done)
+		go server.Start(done)
 	}
 
 	for cnt := len(config.Servers); cnt > 0; cnt-- {

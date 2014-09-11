@@ -1,4 +1,4 @@
-package gtmp
+package main
 
 import (
 	"encoding/binary"
@@ -113,4 +113,18 @@ func NewOnStatusAMFObj(level string, code string, description string, more map[s
 	return AMFObj{atype: AMF_OBJECT,
 		obj: inStatus,
 	}
+}
+
+func NewAMFResult(result string, txnid float64, more ...AMFObj) []AMFObj {
+	r := []AMFObj{
+		AMFObj{atype: AMF_STRING, str: result},
+		AMFObj{atype: AMF_NUMBER, f64: txnid},
+	}
+	for _, obj := range more {
+		r = append(r, obj)
+	}
+	for i := len(r); i < 4; i++ {
+		r = append(r, AMFObj{atype: AMF_NULL})
+	}
+	return r
 }

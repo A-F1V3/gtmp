@@ -1,4 +1,4 @@
-package gtmp
+package main
 
 import (
 	"bytes"
@@ -9,21 +9,28 @@ import (
 
 type ChunkStream struct {
 	sync.Mutex
-	chunkSize int
+	readChunkSize  int
+	writeChunkSize int
 }
 
 const (
 	DEFAULT_CHUNK_SIZE = 128
 )
 
+func NewChunkStream() *ChunkStream {
+	return &ChunkStream{
+		readChunkSize:  DEFAULT_CHUNK_SIZE,
+		writeChunkSize: DEFAULT_CHUNK_SIZE,
+	}
+}
+
 func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 	defer close(messages)
 
 	chunkMap := make(map[int]*Message)
-	chunkSize := DEFAULT_CHUNK_SIZE
 
 	for {
-		chunk, err := ReadChunk(input, chunkSize)
+		chunk, err := ReadChunk(input, c.readChunkSize)
 		if err != nil {
 			return
 		}
@@ -54,7 +61,7 @@ func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 
 func (cs *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) error {
 	for message := range messages {
-		c := &Chunk{size: cs.chunkSize}
+		c := &Chunk{size: cs.writeChunkSize}
 		c.fmt = 0
 		c.csid = getChunkStreamId(message)
 		c.ts = message.timestamp

@@ -1,5 +1,5 @@
 {
-  "Name": "shit",
+  "Name": "rtmpserver",
   "servers": [
     {
       "address": ":1935",

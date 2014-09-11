@@ -1,4 +1,4 @@
-package gtmp
+package main
 
 type Stream struct {
 	name      string

@@ -1,4 +1,4 @@
-package gtmp
+package main
 
 import (
 	"bytes"
@@ -145,6 +145,14 @@ func NewStreamBeginMessage(streamid int) (*Message, error) {
 	return NewUserCtrlMessage(USR_STREAM_BEGIN, buf)
 }
 
+func NewAMFCmdMessage(body []AMFObj) *Message {
+	var b bytes.Buffer
+	for _, v := range body {
+		WriteAMF(&b, v)
+	}
+	return NewControlMessage(MSG_AMF_CMD, b.Bytes())
+}
+
 func NewAMFStatusMessage(level string, code string, description string, more map[string]AMFObj) *Message {
 	body := []AMFObj{
 		AMFObj{atype: AMF_STRING, str: "onStatus"},
@@ -152,9 +160,5 @@ func NewAMFStatusMessage(level string, code string, description string, more map
 		AMFObj{atype: AMF_NULL},
 		NewOnStatusAMFObj(level, code, description, more),
 	}
-	var b bytes.Buffer
-	for _, v := range body {
-		WriteAMF(&b, v)
-	}
-	return NewControlMessage(MSG_AMF_CMD, b.Bytes())
+	return NewAMFCmdMessage(body)
 }

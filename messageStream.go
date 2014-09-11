@@ -1,7 +1,6 @@
-package gtmp
+package main
 
 import (
-	"bytes"
 	"log"
 )
 
@@ -28,14 +27,23 @@ type MessageStream struct {
 	role        int
 }
 
-func (m *MessageStream) ReadMessages() {
-	for message := range m.inChan {
+func NewMessageStream(server *Server) *MessageStream {
+	return &MessageStream{
+		outChan: make(chan *Message),
+		server:  server,
+	}
+}
+
+func (m *MessageStream) ReadMessages(messages chan *Message) {
+	for message := range messages {
 		m.handleMessage(message)
 	}
 }
 
 func (m *MessageStream) WriteMessages(messages chan *Message) {
-
+	for message := range m.outChan {
+		messages <- message
+	}
 }
 
 func (m *MessageStream) handleMessage(message *Message) {
@@ -92,7 +100,7 @@ func (m *MessageStream) handleAmfCommand(message *Message) {
 
 }
 
-func (m MessageStream) handleConnect(amfs []AMFObj, message *Message) {
+func (m *MessageStream) handleConnect(amfs []AMFObj, message *Message) {
 	log.Println("Handle Connect")
 	txnId := amfs[0]
 	if txnId.f64 != 1 {
@@ -108,7 +116,24 @@ func (m MessageStream) handleConnect(amfs []AMFObj, message *Message) {
 	appName := commandObject.obj["app"].str
 	log.Println("Connect message for app:", appName)
 
-	log.Println("Command Object: ", commandObject)
+	app, ok := m.server.Applications[appName]
+	if !ok {
+		log.Println("app doesnt exist, shut it down")
+		result := NewAMFResult("_error",
+			txnId.f64,
+			AMFObj{atype: AMF_NULL},
+			NewOnStatusAMFObj("error", "NetConnection.Connect.InvalidApp", "No app "+appName+" on server", nil),
+		)
+		msg := NewAMFCmdMessage(result)
+
+		m.outChan <- msg
+		return
+	}
+
+	m.app = app
+	log.Println("connected to:", app)
+
+	//log.Println("Command Object: ", commandObject)
 
 	var msg *Message
 	var err error
@@ -125,9 +150,9 @@ func (m MessageStream) handleConnect(amfs []AMFObj, message *Message) {
 	}
 	m.outChan <- msg
 
-	result := []AMFObj{
-		AMFObj{atype: AMF_STRING, str: "_result"},
-		AMFObj{atype: AMF_NUMBER, f64: txnId.f64},
+	result := NewAMFResult(
+		"_result",
+		txnId.f64,
 		AMFObj{atype: AMF_OBJECT,
 			obj: map[string]AMFObj{
 				"flashVer":     AMFObj{atype: AMF_STRING, str: "FMS/3,0,1,123"},
@@ -145,77 +170,43 @@ func (m MessageStream) handleConnect(amfs []AMFObj, message *Message) {
 				},
 			},
 		),
-	}
-
-	var b bytes.Buffer
-	for _, v := range result {
-		WriteAMF(&b, v)
-	}
-	msg = NewControlMessage(MSG_AMF_CMD, b.Bytes())
+	)
+	msg = NewAMFCmdMessage(result)
 
 	m.outChan <- msg
 
 }
 
-func (m MessageStream) handleReleaseStream(amfs []AMFObj, message *Message) {
+func (m *MessageStream) handleReleaseStream(amfs []AMFObj, message *Message) {
 	log.Println("Handle ReleaseStream")
 	txnId := amfs[0].f64
 	streamName := amfs[2].str
 	log.Println("Release stream:", streamName)
-	result := []AMFObj{
-		AMFObj{atype: AMF_STRING, str: "_result"},
-		AMFObj{atype: AMF_NUMBER, f64: txnId},
-		AMFObj{atype: AMF_NULL},
-		AMFObj{atype: AMF_NULL},
-	}
-
-	var b bytes.Buffer
-	for _, v := range result {
-		WriteAMF(&b, v)
-	}
-	msg := NewControlMessage(MSG_AMF_CMD, b.Bytes())
+	result := NewAMFResult("_result", txnId)
+	msg := NewAMFCmdMessage(result)
 	m.outChan <- msg
 }
 
-func (m MessageStream) handleFCPublish(amfs []AMFObj, message *Message) {
+func (m *MessageStream) handleFCPublish(amfs []AMFObj, message *Message) {
 	log.Println("Handle FCPublish")
 	txnId := amfs[0].f64
 	streamName := amfs[2].str
 	log.Println("FCPublish:", streamName)
-	result := []AMFObj{
-		AMFObj{atype: AMF_STRING, str: "_result"},
-		AMFObj{atype: AMF_NUMBER, f64: txnId},
-		AMFObj{atype: AMF_NULL},
-		AMFObj{atype: AMF_NULL},
-	}
-	var b bytes.Buffer
-	for _, v := range result {
-		WriteAMF(&b, v)
-	}
-	msg := NewControlMessage(MSG_AMF_CMD, b.Bytes())
+	result := NewAMFResult("_result", txnId)
+	msg := NewAMFCmdMessage(result)
 	m.outChan <- msg
 }
 
-func (m MessageStream) handleCreateStream(amfs []AMFObj, message *Message) {
+func (m *MessageStream) handleCreateStream(amfs []AMFObj, message *Message) {
 	log.Println("Handle CreateStream")
 	txnId := amfs[0].f64
 
-	result := []AMFObj{
-		AMFObj{atype: AMF_STRING, str: "_result"},
-		AMFObj{atype: AMF_NUMBER, f64: txnId},
-		AMFObj{atype: AMF_NULL},
-		AMFObj{atype: AMF_NUMBER, f64: 1},
-	}
-
-	var b bytes.Buffer
-	for _, v := range result {
-		WriteAMF(&b, v)
-	}
-	msg := NewControlMessage(MSG_AMF_CMD, b.Bytes())
+	result := NewAMFResult("_result", txnId, AMFObj{atype: AMF_NULL}, AMFObj{atype: AMF_NUMBER, f64: 1})
+	msg := NewAMFCmdMessage(result)
 	m.outChan <- msg
 }
 
-func (m MessageStream) handlePublish(amfs []AMFObj, message *Message) {
+func (m *MessageStream) handlePublish(amfs []AMFObj, message *Message) {
 	txnId := amfs[0].f64
 	if txnId != 0 {
 		log.Println("publish txnid should be 0, not:", txnId)
@@ -225,6 +216,8 @@ func (m MessageStream) handlePublish(amfs []AMFObj, message *Message) {
 	pubType := amfs[3].str
 
 	log.Printf("Publish: %s, Type: %s", streamName, pubType)
+
+	m.app.Publish(streamName)
 
 	m.outChan <- NewAMFStatusMessage("status", "NetStream.Publish.Start", "", nil)
 
