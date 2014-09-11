@@ -1,4 +1,4 @@
-package main
+package gtmp
 
 import (
 	"fmt"
@@ -88,12 +88,12 @@ func ReadIntLE(r io.Reader, n int) (ret int, err error) {
 	return
 }
 
-func WriteBuf(w io.Writer, buf []byte) (int, error){
+func WriteBuf(w io.Writer, buf []byte) (int, error) {
 	return w.Write(buf)
 }
 
 func WriteInt(w io.Writer, v int, n int) {
-	b := IntToBuf(v,n)
+	b := IntToBuf(v, n)
 	WriteBuf(w, b)
 }
 
@@ -106,10 +106,10 @@ func WriteIntLE(w io.Writer, v int, n int) (int, error) {
 	return WriteBuf(w, b)
 }
 
-func IntToBuf(num int, size int) ([]byte){
+func IntToBuf(num int, size int) []byte {
 	b := make([]byte, size)
 	for i := 0; i < size; i++ {
-		b[size-i-1] = byte(num&0xff)
+		b[size-i-1] = byte(num & 0xff)
 		num >>= 8
 	}
 	return b

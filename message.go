@@ -1,11 +1,11 @@
-package main
+package gtmp
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
 	"io"
 	"log"
-	"bytes"
-	"fmt"
-	"errors"
 )
 
 const (
@@ -42,12 +42,13 @@ type Message struct {
 	typeid    int
 	length    int
 	timestamp int
+	tsdelta   int
 	streamid  int
 	payload   *bytes.Buffer
 }
 
 func (msg *Message) String() string {
-	return fmt.Sprintf("Message{ Type: %d, Timestamp: %d, Stream: %d, Length: %d }", msg.typeid, msg.timestamp, msg.streamid, msg.lengths)
+	return fmt.Sprintf("Message{ Type: %d, Timestamp: %d, Stream: %d, Length: %d }", msg.typeid, msg.timestamp, msg.streamid, msg.length)
 }
 
 func (msg *Message) addChunk(chunk *Chunk) (*Message, bool, error) {
@@ -59,10 +60,12 @@ func (msg *Message) addChunk(chunk *Chunk) (*Message, bool, error) {
 		msg.typeid = chunk.mtypeid
 		msg.streamid = chunk.msid
 	case 1:
+		msg.tsdelta = chunk.tsdelta
 		msg.timestamp += chunk.tsdelta // check for wraparound !!
 		msg.length = chunk.mlen
 		msg.typeid = chunk.mtypeid
 	case 2:
+		msg.tsdelta = chunk.tsdelta
 		msg.timestamp += chunk.tsdelta
 	}
 
@@ -76,7 +79,7 @@ func (msg *Message) addChunk(chunk *Chunk) (*Message, bool, error) {
 		n, err := io.CopyN(msg.payload, chunk.reader, int64(size))
 		if n != int64(size) {
 			e := errors.New("Chunk data copy error")
-			return msg, false ,e
+			return msg, false, e
 		}
 		if err != nil {
 			return msg, false, err
@@ -90,7 +93,7 @@ func (msg *Message) addChunk(chunk *Chunk) (*Message, bool, error) {
 	return msg, true, nil
 }
 
-func NewControlMessage(typeid int, payload []byte) (*Message){
+func NewControlMessage(typeid int, payload []byte) *Message {
 	message := Message{typeid: typeid, timestamp: 0, streamid: 0, payload: &bytes.Buffer{}}
 	message.payload.Write(payload)
 	message.length = message.payload.Len()
@@ -126,7 +129,7 @@ func NewSetWindowSizeMessage(byteCount int) (*Message, error) {
 
 func NewSetPeerBWMessage(byteCount int, limitType int) (*Message, error) {
 	buf := IntToBuf(byteCount, 4)
-	buf = append(buf, byte(limitType & 0xff))
+	buf = append(buf, byte(limitType&0xff))
 	return NewControlMessage(MSG_BANDWIDTH, buf), nil
 }
 
@@ -139,6 +142,19 @@ func NewUserCtrlMessage(typeid int, value []byte) (*Message, error) {
 
 func NewStreamBeginMessage(streamid int) (*Message, error) {
 	buf := IntToBuf(streamid, 4)
-  return NewUserCtrlMessage(USR_STREAM_BEGIN, buf)
+	return NewUserCtrlMessage(USR_STREAM_BEGIN, buf)
 }
 
+func NewAMFStatusMessage(level string, code string, description string, more map[string]AMFObj) *Message {
+	body := []AMFObj{
+		AMFObj{atype: AMF_STRING, str: "onStatus"},
+		AMFObj{atype: AMF_NUMBER, f64: 0},
+		AMFObj{atype: AMF_NULL},
+		NewOnStatusAMFObj(level, code, description, more),
+	}
+	var b bytes.Buffer
+	for _, v := range body {
+		WriteAMF(&b, v)
+	}
+	return NewControlMessage(MSG_AMF_CMD, b.Bytes())
+}

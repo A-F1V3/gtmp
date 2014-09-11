@@ -1,4 +1,4 @@
-package main
+package gtmp
 
 import (
 	"bytes"
@@ -13,23 +13,23 @@ type ChunkStream struct {
 }
 
 const (
-  DEFAULT_CHUNK_SIZE = 128
+	DEFAULT_CHUNK_SIZE = 128
 )
 
 func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 	defer close(messages)
 
-  chunkMap := make(map[int]*Message)
-  chunkSize := DEFAULT_CHUNK_SIZE
+	chunkMap := make(map[int]*Message)
+	chunkSize := DEFAULT_CHUNK_SIZE
 
 	for {
 		chunk, err := ReadChunk(input, chunkSize)
-    if err != nil {
-      return
-    }
+		if err != nil {
+			return
+		}
 		message, ok := chunkMap[chunk.csid]
 		if !ok {
-			message  = &Message{payload: &bytes.Buffer{}}
+			message = &Message{payload: &bytes.Buffer{}}
 		}
 
 		message, more, err := message.addChunk(chunk)
@@ -38,7 +38,7 @@ func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 		}
 
 		if !more {
-			log.Println("Full Message Parsed: ", message)
+			//log.Println("Full Message Parsed: ", message)
 			messages <- message
 
 			//copy message with with new payload buffer
@@ -52,12 +52,11 @@ func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 
 }
 
-func (cs *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) {
+func (cs *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) error {
 	for message := range messages {
-		log.Println("CHUNK IT:", message)
 		c := &Chunk{size: cs.chunkSize}
 		c.fmt = 0
-		c.csid = 2
+		c.csid = getChunkStreamId(message)
 		c.ts = message.timestamp
 		c.msid = message.streamid
 		c.mlen = message.length
@@ -65,20 +64,24 @@ func (cs *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) {
 		c.reader = message.payload
 
 		for n := c.mlen; n > 0; {
-			c.WriteChunkHeader(output)
+			buf := &bytes.Buffer{}
 
-			written, _ :=	io.CopyN(output, c.reader, int64(c.size))
+			c.WriteChunkHeader(buf)
+
+			written, _ := io.CopyN(buf, c.reader, int64(c.size))
 			n -= int(written)
 
-			if n > 0 && n < c.size {
-				log.Println("Writing moar")
-				tt, _ :=output.Write(make([]byte,n))
-				n -= int(tt)
+			_, err := output.Write(buf.Bytes())
+			if err != nil {
+				return err
 			}
+			//log.Printf("Chunk written: %s, Bytes: %d",c,r)
+			c.fmt = 3
 		}
-		log.Println("done with:", message)
+		log.Printf("Message Sent: %d, on cs %d", message, c.csid)
 
 	}
+	return nil
 }
 
 func ReadChunk(r io.Reader, chunkSize int) (c *Chunk, err error) {
@@ -88,4 +91,11 @@ func ReadChunk(r io.Reader, chunkSize int) (c *Chunk, err error) {
 	return
 }
 
-
+func getChunkStreamId(message *Message) (csid int) {
+	switch message.typeid {
+	case MSG_AMF_CMD:
+		return 3
+	default:
+		return 2
+	}
+}

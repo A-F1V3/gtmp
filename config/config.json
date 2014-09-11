@@ -1,0 +1,13 @@
+{
+  "Name": "shit",
+  "servers": [
+    {
+      "address": ":1935",
+      "applications" : {
+        "live" : {
+          "name" : "live"
+        }
+      }
+    }
+  ]
+}

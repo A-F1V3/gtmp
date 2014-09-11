@@ -1,7 +1,7 @@
-package main
+package gtmp
 
 type Stream struct {
-  name string
-  publisher *MessageStream
-  players []*MessageStream
+	name      string
+	publisher *MessageStream
+	players   []*MessageStream
 }

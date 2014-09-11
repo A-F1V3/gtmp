@@ -1,6 +1,6 @@
-package main
+package gtmp
 
 type Application struct {
-  name string
-  stream []*Stream
+	Name    string
+	Streams []*Stream
 }

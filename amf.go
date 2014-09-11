@@ -1,4 +1,4 @@
-package main
+package gtmp
 
 import (
 	"encoding/binary"
@@ -31,8 +31,11 @@ type AMFObj struct {
 	f64   float64
 }
 
-func ReadAMF(r io.Reader) (a AMFObj) {
-	a.atype, _ = ReadInt(r, 1)
+func ReadAMF(r io.Reader) (a AMFObj, err error) {
+	a.atype, err = ReadInt(r, 1)
+	if err != nil {
+		return a, err
+	}
 	switch a.atype {
 	case AMF_STRING:
 		n, _ := ReadInt(r, 2)
@@ -54,7 +57,7 @@ func ReadAMF(r io.Reader) (a AMFObj) {
 			}
 			nameb, _ := ReadBuf(r, n)
 			name := string(nameb)
-			a.obj[name] = ReadAMF(r)
+			a.obj[name], _ = ReadAMF(r)
 		}
 	case AMF_ARRAY, AMF_VARIANT_:
 		panic("amf: read: unsupported array or variant")
@@ -95,5 +98,19 @@ func WriteAMF(r io.Writer, a AMFObj) {
 		WriteInt(r, a.i, 2)
 	case AMF_INT32:
 		WriteInt(r, a.i, 4)
+	}
+}
+
+func NewOnStatusAMFObj(level string, code string, description string, more map[string]AMFObj) AMFObj {
+	inStatus := map[string]AMFObj{
+		"level":       AMFObj{atype: AMF_STRING, str: level},
+		"code":        AMFObj{atype: AMF_STRING, str: code},
+		"description": AMFObj{atype: AMF_STRING, str: description},
+	}
+	for k, v := range more {
+		inStatus[k] = v
+	}
+	return AMFObj{atype: AMF_OBJECT,
+		obj: inStatus,
 	}
 }
