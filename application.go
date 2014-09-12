@@ -1,12 +1,13 @@
 package main
 
 import (
+	"errors"
 	"log"
 )
 
 type Application struct {
 	Name       string
-	Streams    map[string]*Stream
+	streams    map[string]*Stream
 	reqChannel chan *AppRequest
 }
 
@@ -19,6 +20,7 @@ type AppRequest struct {
 func (app *Application) Start() {
 	log.Println("Starting app:", app.Name)
 	app.reqChannel = make(chan *AppRequest)
+	app.streams = make(map[string]*Stream)
 	for req := range app.reqChannel {
 		app.handleRequest(req)
 	}
@@ -32,10 +34,13 @@ func (app *Application) Publish(streamName string) (*Stream, error) {
 	req := AppRequest{
 		streamName,
 		func(sn string) *Stream {
-			_, ok := app.Streams[streamName]
+			_, ok := app.streams[streamName]
 			if !ok {
 				log.Println("New Stream:", streamName)
-				return &Stream{name: streamName}
+				newStream := NewStream(streamName)
+				go newStream.StartStream()
+				app.streams[streamName] = newStream
+				return newStream
 			} else {
 				return nil
 			}
@@ -47,5 +52,29 @@ func (app *Application) Publish(streamName string) (*Stream, error) {
 	var err error
 	var stream *Stream
 	stream = <-req.resChan
+	if stream == nil {
+		err = errors.New("None for you")
+	}
 	return stream, err
+}
+
+func (app *Application) Play(streamName string) (*Stream, error) {
+	req := AppRequest{
+		streamName,
+		func(sn string) *Stream {
+			stream, _ := app.streams[streamName]
+			return stream
+		},
+		make(chan *Stream),
+	}
+	app.reqChannel <- &req
+
+	var err error
+	var stream *Stream
+	stream = <-req.resChan
+	if stream == nil {
+		err = errors.New("Stream not found")
+	}
+	return stream, err
+
 }

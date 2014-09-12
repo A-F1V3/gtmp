@@ -38,6 +38,39 @@ const (
 	USR_PING_RES     = 7
 )
 
+const (
+	VID_KEY_FRAME   = 1
+	VID_INTER_FRAME = 2
+	VID_DISP_FRAME  = 3
+	VID_GEN_FRAME   = 4
+	VID_CMD_FRAME   = 5
+)
+
+const (
+	VID_CODEC_SOR     = 2
+	VID_CODEC_SCREEN  = 3
+	VID_CODEC_VP6     = 4
+	VID_CODEC_VP6A    = 5
+	VID_CODEC_SCREEN2 = 6
+	VID_CODEC_AVC     = 7
+)
+
+const (
+	AVC_SEQ_HDR = 0
+	AVC_NALU    = 1
+	AVN_SEQ_END = 2
+)
+
+const (
+	AUDIO_CODEC_MP3 = 2
+	AUDIO_CODEC_AAC = 10
+)
+
+const (
+	AAC_SEQ_HDR = 0
+	AAC_RAW     = 1
+)
+
 type Message struct {
 	typeid    int
 	length    int
