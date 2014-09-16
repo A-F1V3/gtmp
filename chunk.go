@@ -120,13 +120,14 @@ func (c *Chunk) readMsgHeader(r io.Reader) (err error) {
 }
 
 func (c *Chunk) CollectMessage(m *Message) {
+	c.ts = m.timestamp
 	c.msid = m.streamid
 	c.mlen = m.length
 	c.mtypeid = m.typeid
 	c.payload = m.payload
 }
 
-func (c *Chunk) WriteHeader(w io.Writer) (written int, err error) {
+func (c *Chunk) WriteHeader(w io.Writer) (err error) {
 	var b bytes.Buffer
 	f := c.fmt << 6
 	if c.csid < 64 {
@@ -156,12 +157,19 @@ func (c *Chunk) WriteHeader(w io.Writer) (written int, err error) {
 	default:
 		//TODO: warn of erroneous type
 	}
-
-	return w.Write(b.Bytes())
+	_, err = w.Write(b.Bytes())
+	return
 
 }
 
 func (c *Chunk) WritePayload(w io.Writer) (err error) {
-	_, err = io.CopyN(w, c.payload, int64(c.size))
+	size := c.size
+	if c.payload.Len() < size {
+		size = c.payload.Len()
+	}
+	written, err := io.CopyN(w, c.payload, int64(size))
+	if written != int64(size) {
+		err = errors.New("Did not write all bytes")
+	}
 	return
 }

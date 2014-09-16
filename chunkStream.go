@@ -36,13 +36,17 @@ func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 
 		message, ok := chunkMap[chunk.csid]
 		if !ok {
+			// create a new message struct if no message already exists on this chunk stream
 			message = &Message{}
 		}
+
+		message.CollectHeader(chunk)
 		if message.payload == nil {
 			message.payload = &bytes.Buffer{}
-			message.payload.Grow(chunk.mlen)
+			message.payload.Grow(message.length)
 		}
-		message.CollectHeader(chunk)
+
+		//update chunk with any message info that may be missing, and align buffers
 		chunk.CollectMessage(message)
 
 		err = chunk.ReadPayload(input)
@@ -50,21 +54,22 @@ func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 			return
 		}
 
+		//When the payload length matches the length, the full message has been recieved
 		if message.payload.Len() < message.length {
 			chunkMap[chunk.csid] = message
 		} else {
 			log.Println("Full Message Parsed: ", message)
 			switch message.typeid {
 			case MSG_CHUNK_SIZE, MSG_ABORT, MSG_ACK, MSG_ACK_SIZE, MSG_BANDWIDTH:
-				// Protocol Control Messages
-				// These messages operate on the chunk stream level
+				// Protocol Control Messages: These messages operate on the chunk stream level
 				c.handleProtocolControlMessage(message)
 			default:
 				messages <- message
 			}
-			//copy message with with new payload buffer
+			//copy message header data and empty the buffer
 			new_message := *message
 			new_message.payload = nil
+			//place the "empty" message back in the map, for type 1 & 2 chunk fmts
 			chunkMap[chunk.csid] = &new_message
 		}
 
@@ -77,34 +82,32 @@ func (cs *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) err
 		c := NewChunk(cs.writeChunkSize)
 		c.fmt = 0
 		c.csid = getChunkStreamId(message)
-		c.ts = message.timestamp
-		c.msid = message.streamid
-		c.mlen = message.length
-		c.mtypeid = message.typeid
-		c.payload = message.payload
+		c.CollectMessage(message)
 
 		switch message.typeid {
 		case MSG_CHUNK_SIZE:
+			//If we are setting a new chunk size, set it locally for consecutive messages to use
 			body := bytes.NewBuffer(message.payload.Bytes())
 			cs.writeChunkSize, _ = ReadInt(body, 4)
 		}
 
+		// Validate the outbound message
 		if message.length != message.payload.Len() {
-			log.Println("uh oh")
+			log.Println("Outbound message length and buffer size do not match:", message)
 		}
 
 		for message.payload.Len() > 0 {
-			buf := &bytes.Buffer{}
-
-			c.WriteHeader(buf)
-
-			c.WritePayload(buf)
-
-			_, err := output.Write(buf.Bytes())
+			err := c.WriteHeader(output)
 			if err != nil {
 				return err
 			}
-			//log.Printf("Chunk written: %s, Bytes: %d",c,r)
+
+			err = c.WritePayload(output)
+			if err != nil {
+				return err
+			}
+
+			//Write the rest of the message with type 3 chunk
 			c.fmt = 3
 		}
 		log.Printf("Message Sent: %d, on cs %d", message, c.csid)
