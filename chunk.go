@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"io"
+	"errors"
 )
 
 type Chunk struct {
@@ -14,16 +15,33 @@ type Chunk struct {
 	mlen    int
 	mtypeid int
 	size    int
-	reader  io.Reader
+	payload *bytes.Buffer
 }
 
-func (c *Chunk) ReadChunkHeader(r io.Reader) (err error) {
+func NewChunk(maxSize int) (*Chunk){
+	return &Chunk{size: maxSize}
+}
+
+func (c *Chunk) ReadHeader(r io.Reader) (err error) {
 	err = c.readFmtId(r)
 	if err != nil {
 		return
 	}
 
 	c.readMsgHeader(r)
+	return
+}
+
+func (c *Chunk) ReadPayload(r io.Reader) (err error) {
+	left := c.mlen - c.payload.Len()
+	size := c.size
+	if left < size {
+		size = left
+	}
+	n, err := io.CopyN(c.payload, r, int64(size))
+	if n != int64(size) {
+		err = errors.New("Chunk data copy error")
+	}
 	return
 }
 
@@ -101,7 +119,7 @@ func (c *Chunk) readMsgHeader(r io.Reader) (err error) {
 	return
 }
 
-func (c *Chunk) WriteChunkHeader(w io.Writer) (written int, err error) {
+func (c *Chunk) WriteHeader(w io.Writer) (written int, err error) {
 	var b bytes.Buffer
 	f := c.fmt << 6
 	if c.csid < 64 {
@@ -134,4 +152,9 @@ func (c *Chunk) WriteChunkHeader(w io.Writer) (written int, err error) {
 
 	return w.Write(b.Bytes())
 
+}
+
+func (c *Chunk) WritePayload(w io.Writer) (err error) {
+	_, err = io.CopyN(w, c.payload, int64(c.size))
+	return
 }

@@ -2,9 +2,7 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
-	"io"
 	"log"
 )
 
@@ -84,8 +82,7 @@ func (msg *Message) String() string {
 	return fmt.Sprintf("Message{ Type: %d, Timestamp: %d, Stream: %d, Length: %d }", msg.typeid, msg.timestamp, msg.streamid, msg.length)
 }
 
-func (msg *Message) addChunk(chunk *Chunk) (*Message, bool, error) {
-
+func (msg *Message) CollectHeader(chunk *Chunk) {
 	switch chunk.fmt {
 	case 0:
 		msg.timestamp = chunk.ts
@@ -101,29 +98,6 @@ func (msg *Message) addChunk(chunk *Chunk) (*Message, bool, error) {
 		msg.tsdelta = chunk.tsdelta
 		msg.timestamp += chunk.tsdelta
 	}
-
-	left := msg.length - msg.payload.Len()
-	size := chunk.size
-	if size > left {
-		size = left
-	}
-
-	if size > 0 {
-		n, err := io.CopyN(msg.payload, chunk.reader, int64(size))
-		if n != int64(size) {
-			e := errors.New("Chunk data copy error")
-			return msg, false, e
-		}
-		if err != nil {
-			return msg, false, err
-		}
-	}
-
-	if size == left {
-		return msg, false, nil
-	}
-
-	return msg, true, nil
 }
 
 func NewControlMessage(typeid int, payload []byte) *Message {
