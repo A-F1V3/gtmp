@@ -17,6 +17,7 @@ const (
 type MessageStream struct {
 	inChan          chan *Message
 	outChan         chan *Message
+	mediaChan       chan *Message
 	lastSentMessage *Message
 	metadata        *Message
 	audioHeader     *Message
@@ -29,8 +30,9 @@ type MessageStream struct {
 
 func NewMessageStream(server *Server) *MessageStream {
 	return &MessageStream{
-		outChan: make(chan *Message),
-		server:  server,
+		outChan:   make(chan *Message),
+		mediaChan: make(chan *Message),
+		server:    server,
 	}
 }
 
@@ -290,6 +292,8 @@ func (m *MessageStream) handlePlay(amfs []AMFObj, message *Message) {
 	}
 
 	//set a chunk size here?
+	chunkMsg, _ := NewSetChunkSizeMessage(2048)
+	m.QueueClientMessage(chunkMsg)
 
 	stream, err := m.app.Play(streamName)
 	var res *Message
@@ -297,7 +301,12 @@ func (m *MessageStream) handlePlay(amfs []AMFObj, message *Message) {
 		res = NewAMFStatusMessage("error", "NetStream.Play.StreamNotFound", err.Error(), nil)
 	} else {
 		m.stream = stream
-		stream.Subscribe(m.outChan)
+		stream.Subscribe(m.mediaChan)
+		go func() {
+			for mediaMessage := range m.mediaChan {
+				m.QueueClientMessage(mediaMessage)
+			}
+		}()
 		res = NewAMFStatusMessage("status", "NetStream.Play.Start", "", nil)
 	}
 

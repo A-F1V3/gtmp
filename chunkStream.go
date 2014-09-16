@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"io"
 	"log"
-	"sync"
 )
 
 type ChunkStream struct {
-	sync.Mutex
 	readChunkSize  int
 	writeChunkSize int
 }
@@ -46,7 +44,14 @@ func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 
 		if !more {
 			//log.Println("Full Message Parsed: ", message)
-			messages <- message
+			switch message.typeid {
+			// Protocol Control Messages
+			// These messages operate on the chunk stream level
+			case MSG_CHUNK_SIZE, MSG_ABORT, MSG_ACK, MSG_ACK_SIZE, MSG_BANDWIDTH:
+				c.handleProtocolControlMessage(message)
+			default:
+				messages <- message
+			}
 
 			//copy message with with new payload buffer
 			new_message := *message
@@ -70,6 +75,12 @@ func (cs *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) err
 		c.mtypeid = message.typeid
 		c.reader = message.payload
 
+		switch message.typeid {
+		case MSG_CHUNK_SIZE:
+			body := bytes.NewBuffer(message.payload.Bytes())
+			cs.writeChunkSize, _ = ReadInt(body, 4)
+		}
+
 		for n := c.mlen; n > 0; {
 			buf := &bytes.Buffer{}
 
@@ -89,6 +100,22 @@ func (cs *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) err
 
 	}
 	return nil
+}
+
+func (c *ChunkStream) handleProtocolControlMessage(message *Message) (err error) {
+	switch message.typeid {
+	case MSG_CHUNK_SIZE:
+		var newChunkSize int
+		newChunkSize, err = ReadInt(message.payload, 4)
+		if newChunkSize > 0 && newChunkSize < 0x7FFFFFFF {
+			c.readChunkSize = newChunkSize
+		}
+	case MSG_ABORT:
+	case MSG_ACK:
+	case MSG_ACK_SIZE:
+	case MSG_BANDWIDTH:
+	}
+	return
 }
 
 func ReadChunk(r io.Reader, chunkSize int) (c *Chunk, err error) {
