@@ -39,7 +39,7 @@ func (app *Application) handleRequest(req *AppRequest) {
 }
 
 func (app *Application) Publish(streamName string) (*Stream, error) {
-	err := ExecuteCallbacks(app.Callbacks["publish"].([]Callback))
+	err := ExecuteCallbacks(app.Callbacks["publish"])
 	if err != nil {
 		log.Println("Publish CB failed", err)
 	}
@@ -71,6 +71,10 @@ func (app *Application) Publish(streamName string) (*Stream, error) {
 }
 
 func (app *Application) Play(streamName string) (*Stream, error) {
+	err := ExecuteCallbacks(app.Callbacks["play"])
+	if err != nil {
+		log.Println("Publish CB failed", err)
+	}
 	req := AppRequest{
 		streamName,
 		func(sn string) *Stream {
@@ -81,7 +85,6 @@ func (app *Application) Play(streamName string) (*Stream, error) {
 	}
 	app.reqChannel <- &req
 
-	var err error
 	var stream *Stream
 	stream = <-req.resChan
 	if stream == nil {

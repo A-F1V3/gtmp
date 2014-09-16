@@ -42,8 +42,12 @@ func GetCallbacks(i interface{}) ([]Callback, error) {
 	return callbacks, nil
 }
 
-func ExecuteCallbacks(cbks []Callback) (err error) {
-	for _, cb := range cbks {
+func ExecuteCallbacks(cbks interface{}) (err error) {
+	if cbks == nil {
+		return
+	}
+	cbs := cbks.([]Callback)
+	for _, cb := range cbs {
 		err = cb.Call()
 		if err != nil {
 			return
