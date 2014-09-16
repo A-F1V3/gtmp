@@ -5,7 +5,11 @@
       "address": ":1935",
       "applications" : {
         "live" : {
-          "name" : "live"
+          "name" : "live",
+          "callbacks" : {
+            "play" : "http://localhost/live/streamname",
+            "publish" : "http://localhost/live/streamname"
+          }
         }
       }
     }

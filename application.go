@@ -9,6 +9,7 @@ type Application struct {
 	Name       string
 	streams    map[string]*Stream
 	reqChannel chan *AppRequest
+	Callbacks  map[string]interface{}
 }
 
 type AppRequest struct {
@@ -19,6 +20,13 @@ type AppRequest struct {
 
 func (app *Application) Start() {
 	log.Println("Starting app:", app.Name)
+	log.Println("Starting app:", app)
+
+	for cb, v := range app.Callbacks {
+		app.Callbacks[cb], _ = GetCallbacks(v)
+	}
+	log.Println(app.Callbacks)
+
 	app.reqChannel = make(chan *AppRequest)
 	app.streams = make(map[string]*Stream)
 	for req := range app.reqChannel {
@@ -31,6 +39,11 @@ func (app *Application) handleRequest(req *AppRequest) {
 }
 
 func (app *Application) Publish(streamName string) (*Stream, error) {
+	err := ExecuteCallbacks(app.Callbacks["publish"].([]Callback))
+	if err != nil {
+		log.Println("Publish CB failed", err)
+	}
+
 	req := AppRequest{
 		streamName,
 		func(sn string) *Stream {
@@ -49,7 +62,6 @@ func (app *Application) Publish(streamName string) (*Stream, error) {
 	}
 	app.reqChannel <- &req
 
-	var err error
 	var stream *Stream
 	stream = <-req.resChan
 	if stream == nil {

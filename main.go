@@ -15,7 +15,6 @@ func main() {
 		panic(err)
 	}
 
-	log.Println(string(conf))
 	var config Config
 	json.Unmarshal(conf, &config)
 
