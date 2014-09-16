@@ -36,16 +36,16 @@ func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 
 		message, ok := chunkMap[chunk.csid]
 		if !ok {
-			message = &Message{payload: &bytes.Buffer{}}
+			message = &Message{}
+		}
+		if message.payload == nil {
+			message.payload = &bytes.Buffer{}
 			message.payload.Grow(chunk.mlen)
 		}
 		message.CollectHeader(chunk)
+		chunk.CollectMessage(message)
 
-		chunk.payload = message.payload
-		chunk.mlen = message.length
 		err = chunk.ReadPayload(input)
-
-		//message, more, err := message.addChunk(chunk)
 		if err != nil {
 			return
 		}
@@ -55,16 +55,16 @@ func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 		} else {
 			log.Println("Full Message Parsed: ", message)
 			switch message.typeid {
-			// Protocol Control Messages
-			// These messages operate on the chunk stream level
 			case MSG_CHUNK_SIZE, MSG_ABORT, MSG_ACK, MSG_ACK_SIZE, MSG_BANDWIDTH:
+				// Protocol Control Messages
+				// These messages operate on the chunk stream level
 				c.handleProtocolControlMessage(message)
 			default:
 				messages <- message
 			}
 			//copy message with with new payload buffer
 			new_message := *message
-			new_message.payload = &bytes.Buffer{}
+			new_message.payload = nil
 			chunkMap[chunk.csid] = &new_message
 		}
 
@@ -128,8 +128,6 @@ func (c *ChunkStream) handleProtocolControlMessage(message *Message) (err error)
 	}
 	return
 }
-
-
 
 func getChunkStreamId(message *Message) (csid int) {
 	switch message.typeid {

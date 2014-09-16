@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
-	"io"
 	"errors"
+	"io"
 )
 
 type Chunk struct {
@@ -18,7 +18,7 @@ type Chunk struct {
 	payload *bytes.Buffer
 }
 
-func NewChunk(maxSize int) (*Chunk){
+func NewChunk(maxSize int) *Chunk {
 	return &Chunk{size: maxSize}
 }
 
@@ -117,6 +117,13 @@ func (c *Chunk) readMsgHeader(r io.Reader) (err error) {
 	}
 
 	return
+}
+
+func (c *Chunk) CollectMessage(m *Message) {
+	c.msid = m.streamid
+	c.mlen = m.length
+	c.mtypeid = m.typeid
+	c.payload = m.payload
 }
 
 func (c *Chunk) WriteHeader(w io.Writer) (written int, err error) {
