@@ -10,10 +10,6 @@ const (
 	PLAY
 )
 
-const (
-	DEFAULT_ACK_SIZE = 5000000
-)
-
 type MessageStream struct {
 	inChan          chan *Message
 	outChan         chan *Message
@@ -190,10 +186,13 @@ func (m *MessageStream) handleConnect(amfs []AMFObj, message *Message) {
 	msg, err = NewSetWindowSizeMessage(DEFAULT_ACK_SIZE)
 	m.QueueClientMessage(msg)
 
-	msg, err = NewSetPeerBWMessage(DEFAULT_ACK_SIZE, 0)
+	msg, err = NewSetPeerBWMessage(DEFAULT_ACK_SIZE, 2)
 	m.QueueClientMessage(msg)
 
 	msg, err = NewStreamBeginMessage(message.streamid)
+	m.QueueClientMessage(msg)
+
+	msg, err = NewSetChunkSizeMessage(4096)
 	if err != nil {
 		log.Println("msg create error:", err)
 	}
@@ -262,7 +261,8 @@ func (m *MessageStream) handlePublish(amfs []AMFObj, message *Message) {
 	}
 
 	streamName := amfs[2].str
-	pubType := amfs[3].str
+	pubType := "unknown"
+	//pubType := amfs[3].str
 
 	log.Printf("Publish: %s, Type: %s", streamName, pubType)
 
@@ -270,11 +270,12 @@ func (m *MessageStream) handlePublish(amfs []AMFObj, message *Message) {
 	var res *Message
 	if err != nil {
 		log.Printf("unable to publish stream")
-		res = NewAMFStatusMessage("error", "NetStream.Publish.BadName", err.Error(), nil)
+		res = NewAMFStatusMessage(0, "error", "NetStream.Publish.BadName", err.Error(), nil)
 	} else {
 		m.stream = stream
-		res = NewAMFStatusMessage("status", "NetStream.Publish.Start", "", nil)
+		res = NewAMFStatusMessage(0, "status", "NetStream.Publish.Start", streamName+" is now Published", map[string]AMFObj{"details": AMFObj{atype: AMF_STRING, str: streamName}, "clientid": AMFObj{atype: AMF_NUMBER, f64: 1.0}})
 	}
+	res.streamid = message.streamid
 
 	m.QueueClientMessage(res)
 
@@ -298,7 +299,7 @@ func (m *MessageStream) handlePlay(amfs []AMFObj, message *Message) {
 	stream, err := m.app.Play(streamName)
 	var res *Message
 	if err != nil {
-		res = NewAMFStatusMessage("error", "NetStream.Play.StreamNotFound", err.Error(), nil)
+		res = NewAMFStatusMessage(txnId, "error", "NetStream.Play.StreamNotFound", err.Error(), nil)
 	} else {
 		m.stream = stream
 		stream.Subscribe(m.mediaChan)
@@ -307,7 +308,7 @@ func (m *MessageStream) handlePlay(amfs []AMFObj, message *Message) {
 				m.QueueClientMessage(mediaMessage)
 			}
 		}()
-		res = NewAMFStatusMessage("status", "NetStream.Play.Start", "", nil)
+		res = NewAMFStatusMessage(txnId, "status", "NetStream.Play.Start", "", nil)
 	}
 
 	m.QueueClientMessage(res)

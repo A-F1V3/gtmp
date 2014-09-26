@@ -125,6 +125,7 @@ func NewAbortMessage(csid int) (*Message, error) {
 }
 
 func NewAckMessage(byteCount int) (*Message, error) {
+	log.Println("New Ack Message:", byteCount)
 	buf := IntToBuf(byteCount, 4)
 	return NewControlMessage(MSG_ACK, buf), nil
 }
@@ -160,10 +161,10 @@ func NewAMFCmdMessage(body []AMFObj) *Message {
 	return NewControlMessage(MSG_AMF_CMD, b.Bytes())
 }
 
-func NewAMFStatusMessage(level string, code string, description string, more map[string]AMFObj) *Message {
+func NewAMFStatusMessage(txnid float64, level string, code string, description string, more map[string]AMFObj) *Message {
 	body := []AMFObj{
 		AMFObj{atype: AMF_STRING, str: "onStatus"},
-		AMFObj{atype: AMF_NUMBER, f64: 0},
+		AMFObj{atype: AMF_NUMBER, f64: txnid},
 		AMFObj{atype: AMF_NULL},
 		NewOnStatusAMFObj(level, code, description, more),
 	}

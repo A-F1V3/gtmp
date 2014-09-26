@@ -9,16 +9,25 @@ import (
 type ChunkStream struct {
 	readChunkSize  int
 	writeChunkSize int
+	readAckSize int
+	writeAckSize int
+	bytesRead int
+	bytesWritten int
+	outMessages chan *Message
 }
 
 const (
 	DEFAULT_CHUNK_SIZE = 128
+	DEFAULT_ACK_SIZE = 5000000
 )
 
 func NewChunkStream() *ChunkStream {
 	return &ChunkStream{
 		readChunkSize:  DEFAULT_CHUNK_SIZE,
 		writeChunkSize: DEFAULT_CHUNK_SIZE,
+		readAckSize: DEFAULT_ACK_SIZE,
+		writeAckSize: DEFAULT_ACK_SIZE,
+		bytesRead: 3073,
 	}
 }
 
@@ -29,7 +38,8 @@ func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 
 	for {
 		chunk := NewChunk(c.readChunkSize)
-		err := chunk.ReadHeader(input)
+		read, err := chunk.ReadHeader(input)
+		c.bytesRead += read
 		if err != nil {
 			return
 		}
@@ -49,7 +59,8 @@ func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 		//update chunk with any message info that may be missing, and align buffers
 		chunk.CollectMessage(message)
 
-		err = chunk.ReadPayload(input)
+		read, err = chunk.ReadPayload(input)
+		c.bytesRead += read
 		if err != nil {
 			return
 		}
@@ -78,6 +89,7 @@ func (c *ChunkStream) ReadChunks(input io.Reader, messages chan *Message) {
 }
 
 func (cs *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) error {
+	cs.outMessages = messages
 	for message := range messages {
 		c := NewChunk(cs.writeChunkSize)
 		c.fmt = 0
@@ -89,6 +101,19 @@ func (cs *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) err
 			//If we are setting a new chunk size, set it locally for consecutive messages to use
 			body := bytes.NewBuffer(message.payload.Bytes())
 			cs.writeChunkSize, _ = ReadInt(body, 4)
+		case MSG_AMF_CMD:
+			log.Println("Writing amfs")
+			b := bytes.NewReader(message.payload.Bytes())
+			amfs := make([]AMFObj, 0)
+
+			for {
+				obj, err := ReadAMF(b)
+				if err != nil {
+					break
+				}
+				log.Println("AMF:",obj)
+				amfs = append(amfs, obj)
+			}
 		}
 
 		// Validate the outbound message
@@ -117,6 +142,7 @@ func (cs *ChunkStream) WriteChunks(messages chan *Message, output io.Writer) err
 }
 
 func (c *ChunkStream) handleProtocolControlMessage(message *Message) (err error) {
+	log.Println("Recieved Protocol Control Message:", message)
 	switch message.typeid {
 	case MSG_CHUNK_SIZE:
 		var newChunkSize int
@@ -127,6 +153,14 @@ func (c *ChunkStream) handleProtocolControlMessage(message *Message) (err error)
 	case MSG_ABORT:
 	case MSG_ACK:
 	case MSG_ACK_SIZE:
+		var newAckSize int
+		newAckSize, err = ReadInt(message.payload, 4)
+		if newAckSize > 0 && newAckSize < 0x7FFFFFFF {
+			log.Println("Set new ack size:", newAckSize)
+			c.readChunkSize = newAckSize
+		}
+		msg, _ := NewAckMessage(c.bytesRead)
+		c.outMessages <- msg
 	case MSG_BANDWIDTH:
 	}
 	return
@@ -135,6 +169,9 @@ func (c *ChunkStream) handleProtocolControlMessage(message *Message) (err error)
 func getChunkStreamId(message *Message) (csid int) {
 	switch message.typeid {
 	case MSG_AMF_CMD:
+		if message.streamid == 1 {
+			return 4
+		}
 		return 3
 	default:
 		return 2

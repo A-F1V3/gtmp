@@ -22,17 +22,18 @@ func NewChunk(maxSize int) *Chunk {
 	return &Chunk{size: maxSize}
 }
 
-func (c *Chunk) ReadHeader(r io.Reader) (err error) {
-	err = c.readFmtId(r)
+func (c *Chunk) ReadHeader(r io.Reader) (count int, err error) {
+	count, err = c.readFmtId(r)
 	if err != nil {
 		return
 	}
 
-	c.readMsgHeader(r)
+	bRead, err := c.readMsgHeader(r)
+	count += bRead
 	return
 }
 
-func (c *Chunk) ReadPayload(r io.Reader) (err error) {
+func (c *Chunk) ReadPayload(r io.Reader) (count int, err error) {
 	left := c.mlen - c.payload.Len()
 	size := c.size
 	if left < size {
@@ -42,14 +43,16 @@ func (c *Chunk) ReadPayload(r io.Reader) (err error) {
 	if n != int64(size) {
 		err = errors.New("Chunk data copy error")
 	}
+	count += int(n)
 	return
 }
 
-func (c *Chunk) readFmtId(r io.Reader) (err error) {
+func (c *Chunk) readFmtId(r io.Reader) (count int, err error) {
 	i, err := ReadInt(r, 1)
 	if err != nil {
 		return
 	}
+	count++
 
 	c.fmt = (i >> 6) & 3
 	c.csid = i & 0x3f
@@ -58,15 +61,17 @@ func (c *Chunk) readFmtId(r io.Reader) (err error) {
 	if c.csid == 0 {
 		j, err = ReadInt(r, 1)
 		c.csid = j + 64
+		count++
 	} else if c.csid == 0x01 {
 		j, err = ReadInt(r, 2)
 		c.csid = j + 64
+		count += 2
 	}
 
 	return
 }
 
-func (c *Chunk) readMsgHeader(r io.Reader) (err error) {
+func (c *Chunk) readMsgHeader(r io.Reader) (count int, err error) {
 
 	if c.fmt == 0 {
 		c.ts, err = ReadInt(r, 3)
@@ -85,6 +90,7 @@ func (c *Chunk) readMsgHeader(r io.Reader) (err error) {
 		if err != nil {
 			return
 		}
+		count += 11
 	}
 
 	if c.fmt == 1 {
@@ -100,6 +106,7 @@ func (c *Chunk) readMsgHeader(r io.Reader) (err error) {
 		if err != nil {
 			return
 		}
+		count += 7
 	}
 
 	if c.fmt == 2 {
@@ -107,13 +114,16 @@ func (c *Chunk) readMsgHeader(r io.Reader) (err error) {
 		if err != nil {
 			return
 		}
+		count += 3
 	}
 
 	if c.ts == 0xffffff {
 		c.ts, err = ReadInt(r, 4)
+		count += 4
 	}
 	if c.tsdelta == 0xffffff {
 		c.tsdelta, err = ReadInt(r, 4)
+		count += 4
 	}
 
 	return
@@ -145,7 +155,7 @@ func (c *Chunk) WriteHeader(w io.Writer) (err error) {
 		WriteInt(&b, c.ts, 3)
 		WriteInt(&b, c.mlen, 3)
 		WriteInt(&b, c.mtypeid, 1)
-		WriteInt(&b, c.msid, 4)
+		WriteIntLE(&b, c.msid, 4)
 	case 1:
 		WriteInt(&b, c.tsdelta, 3)
 		WriteInt(&b, c.mlen, 3)
